@@ -136,7 +136,7 @@ int main(int argc, char const *argv[]) {
           "\ttiling: whether to use tiling or not\n");
       return 0;
     }
-    bool tiling = argv[1] == std::string("tiling") ? true : false;
+    tiling = argv[1] == std::string("tiling") ? true : false;
   }
   
   int N = 1024;
