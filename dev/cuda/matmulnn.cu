@@ -106,7 +106,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   if (!tiling) {
     matmulnn_kernel<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
   } else {
-    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N, blockdim);
+    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
   }
   
   cudaDeviceSynchronize();
