@@ -215,13 +215,13 @@ int main(int argc, char const *argv[]) {
         }
       }
     }
+    free(C_3);
   }
 
   free(A);
   free(B);
   free(C);
   free(C_2);
-  free(C_3);
   printf("Done!\n");
   return 0;
 }
