@@ -137,8 +137,13 @@ int main(int argc, char const *argv[]) {
       return 0;
     }
     N = atoi(argv[1]);
-    blockdim = atoi(argv[2]);
-    tiling = argv[3] == std::string("tiling") ? true : false;
+    if (argc > 2) {
+      blockdim = atoi(argv[2]);
+    }
+    
+    if (argc > 3) {
+      tiling = argv[3] == std::string("tiling") ? true : false;
+    }
   }
   
   float *A = make_random_float(N * N);
