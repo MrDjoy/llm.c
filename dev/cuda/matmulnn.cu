@@ -153,7 +153,7 @@ int main(int argc, char const *argv[]) {
 
   float *C_2 = (float *)malloc(N * N * sizeof(float));
   timer.tick();
-  matmulnn_gpu(A, B, C_2, N, tiling);
+  matmulnn_gpu(A, B, C_2, N, false);
   timer.tock();
   printf("gpu time: %ld ms\n", timer.duration().count());
 
@@ -183,10 +183,45 @@ int main(int argc, char const *argv[]) {
       }
   }
 
+  if (tiling) {
+    printf("Tiling\n");
+    float *C_3 = (float *)malloc(N * N * sizeof(float));
+    timer.tick();
+    matmulnn_gpu(A, B, C_3, N, true);
+    timer.tock();
+    printf("gpu time: %ld ms\n", timer.duration().count());
+
+    // check result
+    int nfaults = 0;
+    float tolerance = 1e-4;
+    float epsilon = FLT_EPSILON;
+    for (int i = 0; i < N * N; i++) {
+      // Skip masked elements
+      if (!isfinite(C[i])) continue;
+
+      // print the first few comparisons
+      if (i < 5) {
+        printf("%f %f\n", C[i], C_3[i]);
+      }
+      // effective tolerance is based on expected rounding error (epsilon),
+      // plus any specified additional tolerance
+      float t_eff = tolerance + fabs(C[i]) * epsilon;
+      // ensure correctness for all elements.
+      if (fabs(C[i] - C_3[i]) > t_eff) {
+        printf("Mismatch at %d: CPU_ref: %f vs GPU: %f\n", i, C[i], C_3[i]);
+        nfaults++;
+        if (nfaults >= 10) {
+          exit(EXIT_FAILURE);
+        }
+      }
+    }
+  }
+
   free(A);
   free(B);
   free(C);
   free(C_2);
+  free(C_3);
   printf("Done!\n");
   return 0;
 }
