@@ -129,17 +129,16 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling) {
 
 int main(int argc, char const *argv[]) {
   bool tiling = false;
+  int N = 1024;
   if (argc > 1) {
     if (argv[1] == std::string("help")) {
-      printf(
-          "Usage: ./matmulnn [tiling]\n"
-          "\ttiling: whether to use tiling or not\n");
+      printf("Usage: ./matmul <N> [tiling]\n");
       return 0;
     }
-    tiling = argv[1] == std::string("tiling") ? true : false;
+    N = atoi(argv[1]);
+    tiling = argv[2] == std::string("tiling") ? true : false;
   }
   
-  int N = 1024;
   float *A = make_random_float(N * N);
   float *B = make_random_float(N * N);
   float *C = (float *)malloc(N * N * sizeof(float));
