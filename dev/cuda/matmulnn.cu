@@ -1,5 +1,6 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
+#include <string>
 #include <chrono>
 #include "common.h"
 
@@ -48,7 +49,8 @@ __global__ void matmulnn_kernel(float *A, float *B, float *C, int N) {
   }
 }
 
-#define TILE_DIM = 32;
+#define TILE_DIM 32
+
 __global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N) {
   
   __shared__ float A_s[TILE_DIM][TILE_DIM];
