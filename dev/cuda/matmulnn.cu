@@ -49,22 +49,22 @@ __global__ void matmulnn_kernel(float *A, float *B, float *C, int N) {
   }
 }
 
-#define TILE_DIM 32
+#define TILE_MAX_DIM 32
 
-__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N) {
-  __shared__ float A_s[TILE_DIM][TILE_DIM];
-  __shared__ float B_s[TILE_DIM][TILE_DIM];
+__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N, int tile_dim = TILE_MAX_DIM) {
+  __shared__ float A_s[TILE_MAX_DIM][TILE_MAX_DIM];
+  __shared__ float B_s[TILE_MAX_DIM][TILE_MAX_DIM];
 
   int row = blockIdx.y * blockDim.y + threadIdx.y;
   int col = blockIdx.x * blockDim.x + threadIdx.x;
   
   float sum = 0.f;
   
-  for (int tile = 0; tile < N / TILE_DIM; ++tile) {
-    A_s[threadIdx.y][threadIdx.x] = A[row * N + tile * TILE_DIM + threadIdx.x];
-    B_s[threadIdx.y][threadIdx.x] = B[(tile * TILE_DIM + threadIdx.y) * N + col];
+  for (int tile = 0; tile < N / tile_dim; ++tile) {
+    A_s[threadIdx.y][threadIdx.x] = A[row * N + tile * tile_dim + threadIdx.x];
+    B_s[threadIdx.y][threadIdx.x] = B[(tile * tile_dim + threadIdx.y) * N + col];
     __syncthreads();
-    for (int k = 0; k < TILE_DIM; ++k) {
+    for (int k = 0; k < tile_dim; ++k) {
       sum += A_s[threadIdx.y][k] * B_s[k][threadIdx.x];
     }
     __syncthreads();
@@ -106,7 +106,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   if (!tiling) {
     matmulnn_kernel<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
   } else {
-    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
+    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N, blockdim);
   }
   
   cudaDeviceSynchronize();
