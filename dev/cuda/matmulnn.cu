@@ -75,7 +75,7 @@ __global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N, int 
 }
 
 void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int blockdim = 32) {
-  Timer<std::chrono::milliseconds> timer;
+  Timer<std::chrono::microseconds> timer;
 
   timer.tick();
   // Allocate memory on GPU
