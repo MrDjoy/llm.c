@@ -49,10 +49,9 @@ __global__ void matmulnn_kernel(float *A, float *B, float *C, int N) {
   }
 }
 
-// #define TILE_DIM 32
+#define TILE_DIM 32
 
-__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N, int TILE_DIM = 32) {
-  
+__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N) {
   __shared__ float A_s[TILE_DIM][TILE_DIM];
   __shared__ float B_s[TILE_DIM][TILE_DIM];
 
