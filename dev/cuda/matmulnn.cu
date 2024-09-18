@@ -86,7 +86,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   cudaDeviceSynchronize();
 
   timer.tock();
-  printf("Allocate time: %ld ms\n", timer.duration().count());
+  printf("Allocate time: %ld us\n", timer.duration().count());
 
   // Copy data from CPU to GPU
   timer.tick();
@@ -96,7 +96,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   cudaDeviceSynchronize();
   timer.tock();
 
-  printf("Copy to GPU time: %ld ms\n", timer.duration().count());
+  printf("Copy to GPU time: %ld us\n", timer.duration().count());
 
   // Call kernel
   timer.tick();
@@ -111,14 +111,14 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   
   cudaDeviceSynchronize();
   timer.tock();
-  printf("Kernel time: %ld ms\n", timer.duration().count());
+  printf("Kernel time: %ld us\n", timer.duration().count());
 
   // Copy data from GPU to CPU
   timer.tick();
   cudaMemcpy(C, C_d, N * N * sizeof(float), cudaMemcpyDeviceToHost);
   cudaDeviceSynchronize();
   timer.tock();
-  printf("Copy from GPU time: %ld ms\n", timer.duration().count());
+  printf("Copy from GPU time: %ld us\n", timer.duration().count());
 
   // Free memory
   cudaFree(A_d);
