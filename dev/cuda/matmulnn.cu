@@ -115,6 +115,7 @@ int main(int argc, char const *argv[]) {
   printf("gpu time: %ld ms\n", timer.duration().count());
 
   // check result
+  int nfaults = 0;
   float tolerance = 1e-4;
   float epsilon = FLT_EPSILON;
     for (int i = 0; i < N * N; i++) {
@@ -131,7 +132,7 @@ int main(int argc, char const *argv[]) {
       float t_eff = tolerance + fabs(C[i]) * epsilon;
       // ensure correctness for all elements.
       if (fabs(C[i] - C_2[i]) > t_eff) {
-          printf("Mismatch of %s at %d: CPU_ref: %f vs GPU: %f\n", name, i, C[i], C_2[i]);
+          printf("Mismatch of %s: CPU_ref: %f vs GPU: %f\n", i, C[i], C_2[i]);
           nfaults ++;
           if (nfaults >= 10) {
               exit(EXIT_FAILURE);
