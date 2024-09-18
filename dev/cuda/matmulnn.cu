@@ -49,9 +49,9 @@ __global__ void matmulnn_kernel(float *A, float *B, float *C, int N) {
   }
 }
 
-#define TILE_DIM 32
+// #define TILE_DIM 32
 
-__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N) {
+__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N, int TILE_DIM = 32) {
   
   __shared__ float A_s[TILE_DIM][TILE_DIM];
   __shared__ float B_s[TILE_DIM][TILE_DIM];
@@ -107,7 +107,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   if (!tiling) {
     matmulnn_kernel<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
   } else {
-    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
+    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N, blockdim);
   }
   
   cudaDeviceSynchronize();
