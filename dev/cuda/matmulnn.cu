@@ -75,7 +75,7 @@ __global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N) {
 
 }
 
-void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling) {
+void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int blockdim = 32) {
   Timer<std::chrono::milliseconds> timer;
 
   timer.tick();
@@ -101,7 +101,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling) {
 
   // Call kernel
   timer.tick();
-  dim3 threadsPerBlock(32, 32);
+  dim3 threadsPerBlock(blockdim, blockdim);
   dim3 numBlocks((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
                  (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
   if (!tiling) {
@@ -130,13 +130,15 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling) {
 int main(int argc, char const *argv[]) {
   bool tiling = false;
   int N = 1024;
+  int blockdim = 32;
   if (argc > 1) {
     if (argv[1] == std::string("help")) {
-      printf("Usage: ./matmul <N> [tiling]\n");
+      printf("Usage: ./matmul <N> <blockdim> [tiling]\n");
       return 0;
     }
     N = atoi(argv[1]);
-    tiling = argv[2] == std::string("tiling") ? true : false;
+    blockdim = atoi(argv[2]);
+    tiling = argv[3] == std::string("tiling") ? true : false;
   }
   
   float *A = make_random_float(N * N);
@@ -152,7 +154,7 @@ int main(int argc, char const *argv[]) {
 
   float *C_2 = (float *)malloc(N * N * sizeof(float));
   timer.tick();
-  matmulnn_gpu(A, B, C_2, N, false);
+  matmulnn_gpu(A, B, C_2, N, false, blockdim);
   timer.tock();
   printf("gpu time: %ld ms\n", timer.duration().count());
 
@@ -186,7 +188,7 @@ int main(int argc, char const *argv[]) {
     printf("Tiling\n");
     float *C_3 = (float *)malloc(N * N * sizeof(float));
     timer.tick();
-    matmulnn_gpu(A, B, C_3, N, true);
+    matmulnn_gpu(A, B, C_3, N, true, blockdim);
     timer.tock();
     printf("gpu time: %ld ms\n", timer.duration().count());
 
