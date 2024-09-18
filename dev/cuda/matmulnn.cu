@@ -132,7 +132,7 @@ int main(int argc, char const *argv[]) {
       float t_eff = tolerance + fabs(C[i]) * epsilon;
       // ensure correctness for all elements.
       if (fabs(C[i] - C_2[i]) > t_eff) {
-          printf("Mismatch at %d: CPU_ref: %f vs GPU: %f\n", name, i, C[i], C_2[i]);
+          printf("Mismatch at %d: CPU_ref: %f vs GPU: %f\n", i, C[i], C_2[i]);
           nfaults ++;
           if (nfaults >= 10) {
               exit(EXIT_FAILURE);
