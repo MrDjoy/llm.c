@@ -88,6 +88,11 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N) {
   cudaDeviceSynchronize();
   timer.tock();
   printf("Copy from GPU time: %ld ms\n", timer.duration().count());
+
+  // Free memory
+  cudaFree(A_d);
+  cudaFree(B_d);
+  cudaFree(C_d);
 }
 
 int main(int argc, char const *argv[]) {
@@ -110,7 +115,29 @@ int main(int argc, char const *argv[]) {
   printf("gpu time: %ld ms\n", timer.duration().count());
 
   // check result
-  validate_result(C_2, C, "out", N * N, 1e-3f);
+  float tolerance = 1e-4;
+  float epsilon = FLT_EPSILON;
+    for (int i = 0; i < N * N; i++) {
+      // Skip masked elements
+      if(!isfinite(C[i]))
+          continue;
+
+      // print the first few comparisons
+      if (i < 5) {
+          printf("%f %f\n", C[i], C_2[i]);
+      }
+      // effective tolerance is based on expected rounding error (epsilon),
+      // plus any specified additional tolerance
+      float t_eff = tolerance + fabs(C[i]) * epsilon;
+      // ensure correctness for all elements.
+      if (fabs(C[i] - C_2[i]) > t_eff) {
+          printf("Mismatch of %s at %d: CPU_ref: %f vs GPU: %f\n", name, i, C[i], C_2[i]);
+          nfaults ++;
+          if (nfaults >= 10) {
+              exit(EXIT_FAILURE);
+          }
+      }
+  }
 
   free(A);
   free(B);
