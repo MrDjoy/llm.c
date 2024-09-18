@@ -124,6 +124,7 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   cudaFree(A_d);
   cudaFree(B_d);
   cudaFree(C_d);
+  cudaDeviceSynchronize();
 }
 
 int main(int argc, char const *argv[]) {
