@@ -1,7 +1,9 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
-#include <string>
+
 #include <chrono>
+#include <string>
+
 #include "common.h"
 
 template <class DT = std::chrono::milliseconds,
@@ -51,18 +53,20 @@ __global__ void matmulnn_kernel(float *A, float *B, float *C, int N) {
 
 #define TILE_MAX_DIM 32
 
-__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N, int tile_dim = TILE_MAX_DIM) {
+__global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N,
+                                       int tile_dim = TILE_MAX_DIM) {
   __shared__ float A_s[TILE_MAX_DIM][TILE_MAX_DIM];
   __shared__ float B_s[TILE_MAX_DIM][TILE_MAX_DIM];
 
   int row = blockIdx.y * blockDim.y + threadIdx.y;
   int col = blockIdx.x * blockDim.x + threadIdx.x;
-  
+
   float sum = 0.f;
-  
+
   for (int tile = 0; tile < N / tile_dim; ++tile) {
     A_s[threadIdx.y][threadIdx.x] = A[row * N + tile * tile_dim + threadIdx.x];
-    B_s[threadIdx.y][threadIdx.x] = B[(tile * tile_dim + threadIdx.y) * N + col];
+    B_s[threadIdx.y][threadIdx.x] =
+        B[(tile * tile_dim + threadIdx.y) * N + col];
     __syncthreads();
     for (int k = 0; k < tile_dim; ++k) {
       sum += A_s[threadIdx.y][k] * B_s[k][threadIdx.x];
@@ -71,10 +75,24 @@ __global__ void matmulnn_kernel_tiling(float *A, float *B, float *C, int N, int 
   }
 
   C[row * N + col] = sum;
-
 }
 
-void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int blockdim = 32) {
+void matmulnn_gpu2(float *A_d, float *B_d, float *C_d, unsigned int N,
+                   bool tiling, int blockdim = 32) {
+  // Call kernel
+  dim3 threadsPerBlock(blockdim, blockdim);
+  dim3 numBlocks((N + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                 (N + threadsPerBlock.y - 1) / threadsPerBlock.y);
+  if (!tiling) {
+    matmulnn_kernel<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
+  } else {
+    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N,
+                                                           blockdim);
+  }
+}
+
+void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling,
+                  int blockdim = 32) {
   Timer<std::chrono::microseconds> timer;
 
   timer.tick();
@@ -106,9 +124,10 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   if (!tiling) {
     matmulnn_kernel<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N);
   } else {
-    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N, blockdim);
+    matmulnn_kernel_tiling<<<numBlocks, threadsPerBlock>>>(A_d, B_d, C_d, N,
+                                                           blockdim);
   }
-  
+
   cudaDeviceSynchronize();
   timer.tock();
   printf("Kernel time: %ld us\n", timer.duration().count());
@@ -127,6 +146,33 @@ void matmulnn_gpu(float *A, float *B, float *C, unsigned int N, bool tiling, int
   cudaDeviceSynchronize();
 }
 
+void check_result(float *ref, float *C, int N) {
+  int nfaults = 0;
+  float tolerance = 1e-4;
+  float epsilon = FLT_EPSILON;
+  for (int i = 0; i < N * N; i++) {
+    // Skip masked elements
+    if (!isfinite(C[i])) continue;
+
+    // print the first few comparisons
+    if (i < 5) {
+      printf("%f %f\n", ref[i], C[i]);
+    }
+    // effective tolerance is based on expected rounding error (epsilon),
+    // plus any specified additional tolerance
+    float t_eff = tolerance + fabs(C[i]) * epsilon;
+    // ensure correctness for all elements.
+    if (fabs(ref[i] - C[i]) > t_eff) {
+      printf("Mismatch at %d: CPU_ref: %f vs GPU: %f\n", i, ref[i], C[i]);
+      nfaults++;
+      if (nfaults >= 10) {
+        // free!
+        exit(EXIT_FAILURE);
+      }
+    }
+  }
+}
+
 int main(int argc, char const *argv[]) {
   bool tiling = false;
   int N = 1024;
@@ -140,94 +186,94 @@ int main(int argc, char const *argv[]) {
     if (argc > 2) {
       blockdim = atoi(argv[2]);
     }
-    
+
     if (argc > 3) {
       tiling = argv[3] == std::string("tiling") ? true : false;
     }
   }
-  
+
+  // utilities
+  cudaEvent_t start;
+  cudaEvent_t stop;
+  float msecTotal;
+  float flop = 2 * (float)N * (float)N * (float)N;
+
+  // set seed for rand()
+  srand(2006);
+
   float *A = make_random_float(N * N);
   float *B = make_random_float(N * N);
   float *C = (float *)malloc(N * N * sizeof(float));
+  float *ref = (float *)malloc(N * N * sizeof(float));
 
   Timer<std::chrono::milliseconds> timer;
   timer.tick();
-  matmulnn_cpu(A, B, C, N);
+  matmulnn_cpu(A, B, ref, N);
   timer.tock();
-
   printf("cpu time: %ld ms\n", timer.duration().count());
 
-  float *C_2 = (float *)malloc(N * N * sizeof(float));
-  timer.tick();
-  matmulnn_gpu(A, B, C_2, N, false, blockdim);
-  timer.tock();
-  printf("gpu time: %ld ms\n", timer.duration().count());
+  // Allocate memory on GPU
+  float *A_d, *B_d, *C_d;
+  cudaMalloc((void **)&A_d, N * N * sizeof(float));
+  cudaMalloc((void **)&B_d, N * N * sizeof(float));
+  cudaMalloc((void **)&C_d, N * N * sizeof(float));
 
+  // create and start timer
+  cudaEventCreate(&start);
+  cudaEventRecord(start, NULL);
+
+  // Copy data from CPU to GPU
+  cudaMemcpy(A_d, A, N * N * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(B_d, B, N * N * sizeof(float), cudaMemcpyHostToDevice);
+
+  matmulnn_gpu2(A_d, B_d, C_d, N, false);
+
+  // Copy data from GPU to CPU
+  cudaMemcpy(C, C_d, N * N * sizeof(float), cudaMemcpyDeviceToHost);
+  // stop and destroy timer
+  cudaEventCreate(&stop);
+  cudaEventRecord(stop, NULL);
+  cudaEventSynchronize(stop);
+  cudaEventElapsedTime(&msecTotal, start, stop);
+  printf("GPU Native Sample\n");
+  printf("Processing time: %f (ms), GFLOPS: %f \n", msecTotal,
+         flop / msecTotal / 1e+6);
   // check result
-  int nfaults = 0;
-  float tolerance = 1e-4;
-  float epsilon = FLT_EPSILON;
-    for (int i = 0; i < N * N; i++) {
-      // Skip masked elements
-      if(!isfinite(C[i]))
-          continue;
-
-      // print the first few comparisons
-      if (i < 5) {
-          printf("%f %f\n", C[i], C_2[i]);
-      }
-      // effective tolerance is based on expected rounding error (epsilon),
-      // plus any specified additional tolerance
-      float t_eff = tolerance + fabs(C[i]) * epsilon;
-      // ensure correctness for all elements.
-      if (fabs(C[i] - C_2[i]) > t_eff) {
-          printf("Mismatch at %d: CPU_ref: %f vs GPU: %f\n", i, C[i], C_2[i]);
-          nfaults ++;
-          if (nfaults >= 10) {
-              exit(EXIT_FAILURE);
-          }
-      }
-  }
+  check_result(ref, C, N);
 
   if (tiling) {
-    printf("Tiling\n");
-    float *C_3 = (float *)malloc(N * N * sizeof(float));
-    timer.tick();
-    matmulnn_gpu(A, B, C_3, N, true, blockdim);
-    timer.tock();
-    printf("gpu time: %ld ms\n", timer.duration().count());
+    printf("Tiling start\n");
+    // create and start timer
+    cudaEventCreate(&start);
+    cudaEventRecord(start, NULL);
 
+    // Copy data from CPU to GPU
+    cudaMemcpy(A_d, A, N * N * sizeof(float), cudaMemcpyHostToDevice);
+    cudaMemcpy(B_d, B, N * N * sizeof(float), cudaMemcpyHostToDevice);
+
+    matmulnn_gpu2(A_d, B_d, C_d, N, true, blockdim);
+
+    // Copy data from GPU to CPU
+    cudaMemcpy(C, C_d, N * N * sizeof(float), cudaMemcpyDeviceToHost);
+    // stop and destroy timer
+    cudaEventCreate(&stop);
+    cudaEventRecord(stop, NULL);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&msecTotal, start, stop);
+    printf("GPU Tiling Sample\n");
+    printf("Processing time: %f (ms), GFLOPS: %f \n", msecTotal,
+           flop / msecTotal / 1e+6);
     // check result
-    int nfaults = 0;
-    float tolerance = 1e-4;
-    float epsilon = FLT_EPSILON;
-    for (int i = 0; i < N * N; i++) {
-      // Skip masked elements
-      if (!isfinite(C[i])) continue;
-
-      // print the first few comparisons
-      if (i < 5) {
-        printf("%f %f\n", C[i], C_3[i]);
-      }
-      // effective tolerance is based on expected rounding error (epsilon),
-      // plus any specified additional tolerance
-      float t_eff = tolerance + fabs(C[i]) * epsilon;
-      // ensure correctness for all elements.
-      if (fabs(C[i] - C_3[i]) > t_eff) {
-        printf("Mismatch at %d: CPU_ref: %f vs GPU: %f\n", i, C[i], C_3[i]);
-        nfaults++;
-        if (nfaults >= 10) {
-          exit(EXIT_FAILURE);
-        }
-      }
-    }
-    free(C_3);
+    check_result(ref, C, N);
   }
 
+  // Free memory
   free(A);
   free(B);
   free(C);
-  free(C_2);
+  cudaFree(A_d);
+  cudaFree(B_d);
+  cudaFree(C_d);
   printf("Done!\n");
   return 0;
 }
